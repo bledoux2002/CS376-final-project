@@ -18,6 +18,9 @@ public class GameManager : MonoBehaviour
     [SerializeField] private GameObject vanbigPrefab;
   */
 
+    private int _score;
+    [SerializeField] private TMP_Text scoreText;
+
     [SerializeField] private GameObject player;
     [SerializeField] private float verticalSpeed;
     [SerializeField] private float boostPower;
@@ -34,26 +37,32 @@ public class GameManager : MonoBehaviour
     private Queue<GameObject> _forwardVehicles;
     private float _nextForwardSpawn;
     [SerializeField] private float spawnForwardMin;
-    [SerializeField] private float spawnForwardMax;
-    private GameObject _lastVehicle;
+    public float spawnForwardMax;
+    private GameObject _lastForwardVehicle;
+    private GameObject _lastBackwardVehicle;
 
     private Queue<GameObject> _backwardVehicles;
     private float _nextBackwardSpawn;
     [SerializeField] private float spawnBackwardMin;
-    [SerializeField] private float spawnBackwardMax;
+    public float spawnBackwardMax;
     
     [SerializeField] private TMP_Text speedText;
     [SerializeField] private TMP_Text distanceText;
-    [SerializeField] private GameObject gameOverScreen;
+    [SerializeField] private GameObject pauseScreen;
+    [SerializeField] private GameObject gameOverText;
+    [SerializeField] private GameObject restartButton;
+    [SerializeField] private GameObject resumeButton;
     
     void Start()
     {
+        _score = 0;
         _distance = 0f;
         _numPrefabs = vehiclePrefabs.Length;
         _vehiclesRB = vehicles.GetComponent<Rigidbody>();
         _forwardVehicles = new Queue<GameObject>();
         _nextForwardSpawn = 0f; // forward spawn refers to z coord, while backward spawn refers to Time.time
-        _lastVehicle = player; // this allows the first non-player vehicle to be spawned since player z will always be less than 0
+        _lastForwardVehicle = player; // this allows the first non-player vehicle to be spawned since player z will always be less than 0
+        _lastBackwardVehicle = player; // this allows the first non-player vehicle to be spawned since player z will always be less than 0
         _backwardVehicles = new Queue<GameObject>();
         _nextBackwardSpawn = 0f;
     }
@@ -61,24 +70,24 @@ public class GameManager : MonoBehaviour
     void Update()
     {
         // Spawn Forward-facing vehicle
-        if (_lastVehicle.transform.position.z <= _nextForwardSpawn)
+        if (_lastForwardVehicle.transform.position.z <= _nextForwardSpawn)
         {
             float spacing = Random.Range(spawnForwardMin, spawnForwardMax);
             _nextForwardSpawn = 25f - spacing;
-            _lastVehicle = Spawn(true, _forwardVehicles);
+            _lastForwardVehicle = Spawn(true, _forwardVehicles);
         }
         
         // Spawn Rear-facing vehicle
-        if (Time.time >= _nextBackwardSpawn)
+        if (_lastBackwardVehicle.transform.position.z <= _nextBackwardSpawn)
         {
             float spacing = Random.Range(spawnBackwardMin, spawnBackwardMax);
-            _nextBackwardSpawn = Time.time + spacing;
-            Spawn(false, _backwardVehicles);
+            _nextBackwardSpawn = 25f - spacing;
+            _lastBackwardVehicle = Spawn(false, _backwardVehicles);
         }
 
         // Depending on input, move other vehicles forward/back to simulate acceleration/deceleration
         Status playerStatus = player.GetComponent<PlayerController>().Status;
-        float mod = 1f;
+        float mod = -1f;
         if (playerStatus == Status.BOOSTING)
         {
             mod = boostPower;
@@ -87,11 +96,10 @@ public class GameManager : MonoBehaviour
         {
             mod = -brakePower;
         }
-
-        float speed = mod * player.GetComponent<PlayerController>().VehicleShift * verticalSpeed;
+        float input = player.GetComponent<PlayerController>().VehicleShift;
+        float speed = (mod + input) * verticalSpeed;
         _vehiclesRB.AddForce(speed * Vector3.back);
         if (_vehiclesRB.linearVelocity.magnitude > maxSpeed) _vehiclesRB.linearVelocity = _vehiclesRB.linearVelocity.normalized * maxSpeed;
-        // _vehiclesRB.linearVelocity = Vector3.back * speed;
         speedText.text = $"{(-_vehiclesRB.linearVelocity.z + 60f):F0} MPH";
         _distance += 0.0167f * Time.deltaTime; //roughly 60mph (0.01666) repeating, not gonna calculate actual speed and time difference for now.
         distanceText.text = $"{MathF.Round(_distance, 2):F1} Miles";
@@ -114,12 +122,19 @@ public class GameManager : MonoBehaviour
         }
     }
 
+    public void ChangeScore(int score)
+    {
+        _score += score;
+        scoreText.text = $"Score: {_score}";
+    }
+
     private GameObject Spawn(bool forward, Queue<GameObject> vehiclesQ)
     {
         int i = Random.Range(0, _numPrefabs);
         
         float xOffset = (forward ? 2.5f : -2.5f);
-        Vector3 pos = new Vector3(xOffset, 0f, 25f);
+        float randOffset = Random.Range(-1f, 1f);
+        Vector3 pos = new Vector3(xOffset + randOffset, 0f, 25f);
         float yRotation = (forward ? 0f : 180f);
         Quaternion rot = Quaternion.Euler(0f, yRotation, 0f);
         GameObject vehicle = Instantiate(vehiclePrefabs[i], vehicles.transform);
@@ -159,19 +174,23 @@ public class GameManager : MonoBehaviour
         }
         _forwardVehicles.Clear();
         _nextForwardSpawn = 0f;
-        _lastVehicle = player;
+        _lastForwardVehicle = player;
         foreach (GameObject vehicle in _backwardVehicles) 
         {
             Destroy(vehicle);
         }
         _backwardVehicles.Clear();
-        _nextBackwardSpawn = Time.time;
+        _nextBackwardSpawn = 0f;
+        _lastBackwardVehicle = player;
     }
 
     public void GameOver()
     {
         Time.timeScale = 0;
-        gameOverScreen.SetActive(true);
+        pauseScreen.SetActive(true);
+        gameOverText.SetActive(true);
+        restartButton.SetActive(true);
+        resumeButton.SetActive(false);
     }
 
     public void Restart()
@@ -180,13 +199,29 @@ public class GameManager : MonoBehaviour
         vehicles.GetComponent<Rigidbody>().linearVelocity = Vector3.zero;
         _distance = 0f;
         player.GetComponent<PlayerController>().Reset();
-        gameOverScreen.SetActive(false);
+        gameOverText.SetActive(false);
+        restartButton.SetActive(false);
+        resumeButton.SetActive(true);
+        pauseScreen.SetActive(false);
         Time.timeScale = 1;
     }
 
     public void ReturnToMenu()
     {
         Time.timeScale = 1;
+        // save game
         SceneManager.LoadScene("Main Menu");
+    }
+
+    public void PauseGame()
+    {
+        Time.timeScale = 0;
+        pauseScreen.SetActive(true);
+    }
+
+    public void ResumeGame()
+    {
+        Time.timeScale = 1;
+        pauseScreen.SetActive(false);
     }
 }

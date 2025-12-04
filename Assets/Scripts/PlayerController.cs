@@ -24,12 +24,15 @@ public class PlayerController : MonoBehaviour
     [SerializeField] private TMP_Text boostText;
     public Status Status { get; set; }
 
-    private InputAction moveAction;
-    private InputAction boostAction;
-    private InputAction brakeAction;
+    private InputAction _moveAction;
+    private InputAction _boostAction;
+    private InputAction _brakeAction;
+    private InputAction _pauseAction;
     
     [SerializeField] private AudioSource engineSound;
     [SerializeField] private AudioSource crashSound;
+
+    private bool _crashed;
     
     void Start()
     {
@@ -38,28 +41,35 @@ public class PlayerController : MonoBehaviour
         boostFuel = 100f;
         Status = Status.COASTING;
         
-        moveAction = InputSystem.actions.FindAction("Move");
-        boostAction = InputSystem.actions.FindAction("Boost");
-        brakeAction = InputSystem.actions.FindAction("Brake");
+        _moveAction = InputSystem.actions.FindAction("Move");
+        _boostAction = InputSystem.actions.FindAction("Boost");
+        _brakeAction = InputSystem.actions.FindAction("Brake");
+        _pauseAction = InputSystem.actions.FindAction("Pause");
+
+        _crashed = false;
     }
 
     void Update()
     {
+        if (_pauseAction.WasPressedThisDynamicUpdate())
+        {
+            gm.PauseGame();
+        }
         Move();
         CheckBounds();
     }
 
     private void Move()
     {
-        Vector2 input = moveAction.ReadValue<Vector2>();
-        VehicleShift = input.y;
+        Vector2 input = _moveAction.ReadValue<Vector2>();
+        VehicleShift = input.y * speed;
         Vector3 movement = new Vector3(input.x * speed, 0, 0);
         rb.AddForce(movement);
 
-        bool boostPressed = boostAction.IsPressed();
+        bool boostPressed = _boostAction.IsPressed();
         if (boostPressed && boostFuel > 0f)
         {
-            if (boostFuel >= minBoost && Status != Status.RECOVERING && Status != Status.BRAKING)
+            if (Status != Status.RECOVERING && Status != Status.BRAKING)
             {
                 Status = Status.BOOSTING;
                 boostFuel -= boostDrain * Time.deltaTime;
@@ -74,7 +84,7 @@ public class PlayerController : MonoBehaviour
         }
         else
         {
-            bool brakePressed = brakeAction.IsPressed();
+            bool brakePressed = _brakeAction.IsPressed();
             if (boostFuel < 100f) boostFuel += boostRecover * Time.deltaTime;
             if (boostFuel > 100f) boostFuel = 100f;
             if (brakePressed)
@@ -97,9 +107,9 @@ public class PlayerController : MonoBehaviour
 
     private void CheckBounds()
     {
-        if (transform.position.x > 5f || transform.position.x < -5f)
+        if (!_crashed && (transform.position.x > 5f || transform.position.x < -5f))
         {
-            gm.GameOver();
+            Crash();
         }
     }
 
@@ -107,19 +117,28 @@ public class PlayerController : MonoBehaviour
     {
         if (other.gameObject.CompareTag("Vehicle"))
         {
-            crashSound.Play();
-            engineSound.Stop();
-            gm.GameOver();
+            Crash();
         }
+    }
+
+    private void Crash()
+    {
+        _crashed = true;
+        crashSound.Play();
+        engineSound.Stop();
+        gm.GameOver();
     }
 
     public void Reset()
     {
-        transform.position = new Vector3(2.5f, 0f, -25f);
         rb.linearVelocity = Vector3.zero;
+        rb.Sleep();
+        rb.WakeUp();
+        transform.position = new Vector3(2.5f, 0f, -25f);
         boostFuel = 100f;
         Status = Status.COASTING;
-        engineSound.Play();
+        _crashed = false;
         engineSound.pitch = 0.75f;
+        engineSound.Play();
     }
 }
