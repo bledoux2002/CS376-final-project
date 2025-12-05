@@ -17,7 +17,7 @@ public class PlayerController : MonoBehaviour
     [SerializeField] private Rigidbody rb;
     [SerializeField] private float speed;
     public float VehicleShift { get; set; }
-    private float boostFuel;
+    private float _boostFuel;
     [SerializeField] private float boostDrain;
     [SerializeField] private float boostRecover;
     [SerializeField] private float minBoost;
@@ -38,8 +38,13 @@ public class PlayerController : MonoBehaviour
     {
         gm = GameObject.Find("GameManager").GetComponent<GameManager>();
         
-        boostFuel = 100f;
-        Status = Status.COASTING;
+        _boostFuel = PlayerPrefs.GetFloat("Boost", 100f);
+        // saving enum to playerprefs is annoying
+        string savedStatus = PlayerPrefs.GetString("Status");
+        if (!Enum.TryParse<Status>(savedStatus, out Status result))
+        {
+            Status = Status.COASTING;
+        }
         
         _moveAction = InputSystem.actions.FindAction("Move");
         _boostAction = InputSystem.actions.FindAction("Boost");
@@ -67,17 +72,17 @@ public class PlayerController : MonoBehaviour
         rb.AddForce(movement);
 
         bool boostPressed = _boostAction.IsPressed();
-        if (boostPressed && boostFuel > 0f)
+        if (boostPressed && _boostFuel > 0f)
         {
             if (Status != Status.RECOVERING && Status != Status.BRAKING)
             {
                 Status = Status.BOOSTING;
-                boostFuel -= boostDrain * Time.deltaTime;
+                _boostFuel -= boostDrain * Time.deltaTime;
                 if (engineSound.pitch < 1f) engineSound.pitch += Time.deltaTime;
                 if (engineSound.pitch > 1f) engineSound.pitch = 1f;
-                if (boostFuel < 0f)
+                if (_boostFuel < 0f)
                 {
-                    boostFuel = 0f;
+                    _boostFuel = 0f;
                     Status = Status.RECOVERING;
                 }
             }
@@ -85,24 +90,29 @@ public class PlayerController : MonoBehaviour
         else
         {
             bool brakePressed = _brakeAction.IsPressed();
-            if (boostFuel < 100f) boostFuel += boostRecover * Time.deltaTime;
-            if (boostFuel > 100f) boostFuel = 100f;
+            if (_boostFuel < 100f) _boostFuel += boostRecover * Time.deltaTime;
+            if (_boostFuel > 100f) _boostFuel = 100f;
             if (brakePressed)
             {
                 Status = Status.BRAKING;
-            }
-            else if (boostFuel < minBoost)
-            {
-                Status = Status.RECOVERING;
+                if (engineSound.pitch > 0.65f) engineSound.pitch -= Time.deltaTime;
+                if (engineSound.pitch < 0.65f) engineSound.pitch = 0.65f;
             }
             else
             {
-                Status = Status.COASTING;
+                if (engineSound.pitch > 0.75f) engineSound.pitch -= Time.deltaTime;
+                if (engineSound.pitch < 0.75f) engineSound.pitch = 0.75f;
+                if (_boostFuel < minBoost)
+                {
+                    Status = Status.RECOVERING;
+                }
+                else
+                {
+                    Status = Status.COASTING;
+                }
             }
-            if (engineSound.pitch > 0.75f) engineSound.pitch -= Time.deltaTime;
-            if (engineSound.pitch < 0.75f) engineSound.pitch = 0.75f;
         }
-        boostText.text = $"{(int)boostFuel}";
+        boostText.text = $"{(int)_boostFuel}";
     }
 
     private void CheckBounds()
@@ -135,10 +145,16 @@ public class PlayerController : MonoBehaviour
         rb.Sleep();
         rb.WakeUp();
         transform.position = new Vector3(2.5f, 0f, -25f);
-        boostFuel = 100f;
+        _boostFuel = 100f;
         Status = Status.COASTING;
         _crashed = false;
         engineSound.pitch = 0.75f;
         engineSound.Play();
+    }
+
+    public void SavePrefs()
+    {
+        PlayerPrefs.SetFloat("Boost", _boostFuel);
+        PlayerPrefs.SetString("Status", Status.ToString());
     }
 }

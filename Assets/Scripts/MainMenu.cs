@@ -7,21 +7,8 @@ public class MainMenu : MonoBehaviour
     [SerializeField] private GameObject MainMenuObject;
     [SerializeField] private GameObject InstructionsMenu;
     
-    // Start is called once before the first execution of Update after the MonoBehaviour is created
-    void Start()
-    {
-        
-    }
-
-    // Update is called once per frame
-    void Update()
-    {
-        
-    }
-
     public void LoadScene(string scene)
     {
-        // load game
         SceneManager.LoadScene(scene);
     }
 

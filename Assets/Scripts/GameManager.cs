@@ -52,11 +52,13 @@ public class GameManager : MonoBehaviour
     [SerializeField] private GameObject gameOverText;
     [SerializeField] private GameObject restartButton;
     [SerializeField] private GameObject resumeButton;
+    [SerializeField] private GameObject saveButton;
     
     void Start()
     {
-        _score = 0;
-        _distance = 0f;
+        _score = PlayerPrefs.GetInt("Score", 0);
+        ChangeScore(0);
+        _distance = PlayerPrefs.GetFloat("Distance", 0f);
         _numPrefabs = vehiclePrefabs.Length;
         _vehiclesRB = vehicles.GetComponent<Rigidbody>();
         _forwardVehicles = new Queue<GameObject>();
@@ -102,7 +104,7 @@ public class GameManager : MonoBehaviour
         if (_vehiclesRB.linearVelocity.magnitude > maxSpeed) _vehiclesRB.linearVelocity = _vehiclesRB.linearVelocity.normalized * maxSpeed;
         speedText.text = $"{(-_vehiclesRB.linearVelocity.z + 60f):F0} MPH";
         _distance += 0.0167f * Time.deltaTime; //roughly 60mph (0.01666) repeating, not gonna calculate actual speed and time difference for now.
-        distanceText.text = $"{MathF.Round(_distance, 2):F1} Miles";
+        distanceText.text = $"{_distance:F1} Miles";
 
         ResetVehiclesObject();
     }
@@ -187,29 +189,40 @@ public class GameManager : MonoBehaviour
     public void GameOver()
     {
         Time.timeScale = 0;
+        // ChangeScore(-_score);
+        _score = 0;
+        // display distance at end of game, but reset in background so it cant be recovered from playerprefs
+        float temp = _distance;
+        _distance = 0f;
+        PlayerPrefs.DeleteAll();
         pauseScreen.SetActive(true);
         gameOverText.SetActive(true);
         restartButton.SetActive(true);
         resumeButton.SetActive(false);
+        saveButton.SetActive(false);
+        distanceText.text = $"{temp:F1} Miles";
     }
 
     public void Restart()
     {
         DespawnAll();
+        ChangeScore(0);
         vehicles.GetComponent<Rigidbody>().linearVelocity = Vector3.zero;
-        _distance = 0f;
+        vehicles.GetComponent<Rigidbody>().Sleep();
+        vehicles.GetComponent<Rigidbody>().WakeUp();
         player.GetComponent<PlayerController>().Reset();
         gameOverText.SetActive(false);
         restartButton.SetActive(false);
         resumeButton.SetActive(true);
+        saveButton.SetActive(true);
         pauseScreen.SetActive(false);
         Time.timeScale = 1;
     }
 
     public void ReturnToMenu()
     {
+        SavePrefs();
         Time.timeScale = 1;
-        // save game
         SceneManager.LoadScene("Main Menu");
     }
 
@@ -223,5 +236,14 @@ public class GameManager : MonoBehaviour
     {
         Time.timeScale = 1;
         pauseScreen.SetActive(false);
+    }
+
+    public void SavePrefs()
+    {
+        // Shouldn't use this normally since it is not secure, anyone can go in and change their values but for this i trust you.
+        PlayerPrefs.SetInt("Score", _score);
+        PlayerPrefs.SetFloat("Distance", _distance);
+        player.GetComponent<PlayerController>().SavePrefs();
+        PlayerPrefs.Save();
     }
 }
